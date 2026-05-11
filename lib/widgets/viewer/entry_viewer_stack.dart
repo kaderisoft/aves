@@ -25,6 +25,7 @@ import 'package:aves/widgets/viewer/entry_vertical_pager.dart';
 import 'package:aves/widgets/viewer/hero.dart';
 import 'package:aves/widgets/viewer/multipage/conductor.dart';
 import 'package:aves/widgets/viewer/overlay/bottom.dart';
+import 'package:aves/widgets/viewer/overlay/csv_metadata.dart';
 import 'package:aves/widgets/viewer/overlay/locked.dart';
 import 'package:aves/widgets/viewer/overlay/panorama.dart';
 import 'package:aves/widgets/viewer/overlay/slideshow_buttons.dart';
@@ -275,6 +276,15 @@ class _EntryViewerStackState extends State<EntryViewerStack> with EntryViewContr
                         } else {
                           // regular overlay
                           children.addAll(_buildOverlays(availableSize).map(_decorateOverlay));
+                            children.add(
+                              ValueListenableBuilder<AvesEntry?>(
+                                valueListenable: entryNotifier,
+                                builder: (context, entry, child) {
+                                  if (entry == null) return const SizedBox();
+                                  return CsvMetadataOverlay(entry: entry);
+                                },
+                              ),
+                            );
                         }
 
                         children.addAll([

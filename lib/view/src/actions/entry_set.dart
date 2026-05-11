@@ -47,6 +47,7 @@ extension ExtraEntrySetActionView on EntrySetAction {
       EntrySetAction.editRating => l10n.entryInfoActionEditRating,
       EntrySetAction.editTags => l10n.entryInfoActionEditTags,
       EntrySetAction.removeMetadata => l10n.entryInfoActionRemoveMetadata,
+      EntrySetAction.addCustomCsv => l10n.collectionActionAddCustomCsv,
     };
   }
 
@@ -94,6 +95,7 @@ extension ExtraEntrySetActionView on EntrySetAction {
       EntrySetAction.editRating => AIcons.rating,
       EntrySetAction.editTags => AIcons.tag,
       EntrySetAction.removeMetadata => AIcons.clear,
+      EntrySetAction.addCustomCsv => AIcons.fileImport,
     };
   }
 }
