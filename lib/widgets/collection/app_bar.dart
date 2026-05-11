@@ -745,6 +745,7 @@ class _CollectionAppBarState extends State<CollectionAppBar> with RouteAware, Si
       case .addDynamicAlbum:
       case .addShortcut:
       case .setHome:
+      case .addCustomCsv:
       // browsing or selecting
       case .map:
       case .slideshow:

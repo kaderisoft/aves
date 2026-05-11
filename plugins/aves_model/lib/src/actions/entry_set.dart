@@ -35,6 +35,7 @@ enum EntrySetAction {
   editRating,
   editTags,
   removeMetadata,
+  addCustomCsv,
 }
 
 class EntrySetActions {
@@ -52,6 +53,7 @@ class EntrySetActions {
     EntrySetAction.addDynamicAlbum,
     EntrySetAction.addShortcut,
     EntrySetAction.setHome,
+    EntrySetAction.addCustomCsv,
     null,
     EntrySetAction.map,
     EntrySetAction.slideshow,

@@ -1,181 +1,124 @@
 import 'dart:io';
+import 'package:aves/model/entry/entry.dart';
 import 'package:csv/csv.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
-/// نموذج البيانات الوصفية
-class ImageMetadata {
-  final String filename;
-  final String title;
-  final String tags;
-  final Map<String, String> customData;
+class CsvMetadataService {
+  static const String dataFolderName = 'AvesData';
 
-  ImageMetadata({
-    required this.filename,
-    required this.title,
-    required this.tags,
-    this.customData = const {},
-  });
+  // Get the base directory for AvesData: /storage/emulated/0/AvesData/
+  static Future<Directory> getBaseDataDirectory() async {
+    // path_provider's getExternalStorageDirectory() usually returns
+    // /storage/emulated/0/Android/data/com.dekart.aves/files
+    // We want /storage/emulated/0/AvesData/
+    // On Android, we can try to navigate up from external storage directory.
 
-  factory ImageMetadata.fromCsvRow(List<dynamic> row, List<String> headers) {
-    final data = <String, String>{};
-    for (int i = 0; i < headers.length; i++) {
-      if (i < row.length) {
-        data[headers[i]] = row[i]?.toString() ?? '';
-      }
+    Directory? externalDir = await getExternalStorageDirectory();
+    if (externalDir == null) {
+      throw Exception('External storage not available');
     }
 
-    return ImageMetadata(
-      filename: data['file name'] ?? '',
-      title: data['title'] ?? '',
-      tags: data['tages'] ?? '',
-      customData: data,
-    );
-  }
+    // externalDir is /storage/emulated/0/Android/data/package_name/files
+    // We want to go up to /storage/emulated/0/
+    String rootPath = externalDir.path;
+    for (int i = 0; i < 4; i++) {
+      rootPath = p.dirname(rootPath);
+    }
 
-  Map<String, dynamic> toJson() => {
-    'filename': filename,
-    'title': title,
-    'tags': tags,
-    'customData': customData,
-  };
-}
-
-/// خدمة إدارة ملفات CSV للبيانات الوصفية
-class CsvMetadataService {
-  static const String _dataFolderName = 'data';
-  static const String _csvFileName = 'metadata.csv';
-
-  /// إنشاء مسار مجلد البيانات
-  static Future<Directory> getDataDirectory() async {
-    final appDocDir = Directory.systemTemp;
-    final dataDir = Directory(p.join(appDocDir.path, _dataFolderName));
-    
+    final dataDir = Directory(p.join(rootPath, dataFolderName));
     if (!await dataDir.exists()) {
       await dataDir.create(recursive: true);
     }
-    
     return dataDir;
   }
 
-  /// الحصول على مسار ملف CSV
-  static Future<File> getMetadataFile() async {
-    final dataDir = await getDataDirectory();
-    return File(p.join(dataDir.path, _csvFileName));
-  }
-
-  /// إنشاء ملف CSV جديد مع أسماء الصور من مجلد
-  static Future<void> createCsvFromFolder(Directory folderPath, List<String> imageExtensions) async {
-    try {
-      final metadataFile = await getMetadataFile();
-      
-      // الحصول على الصور من المجلد
-      final imageFiles = folderPath
-          .listSync()
-          .whereType<File>()
-          .where((file) => imageExtensions.contains(p.extension(file.path).toLowerCase()))
-          .toList();
-
-      // إنشاء رؤوس CSV
-      final headers = ['title', 'file name', 'tages'];
-      
-      // إنشاء البيانات
-      final rows = <List<String>>[];
-      for (var file in imageFiles) {
-        final filename = p.basename(file.path);
-        rows.add(['', filename, '']);
-      }
-
-      // تحويل إلى CSV
-      final csvContent = const ListToCsvConverter().convert([headers, ...rows]);
-      
-      // كتابة الملف
-      await metadataFile.writeAsString(csvContent);
-    } catch (e) {
-      throw Exception('فشل إنشاء ملف CSV: $e');
+  // Map album path to CSV filename
+  // /storage/emulated/0/DCIM/Camera -> DCIM_Camera.csv
+  static String _getSafeCsvName(String albumPath) {
+    // Remove leading slash
+    String path = albumPath;
+    if (path.startsWith('/')) {
+      path = path.substring(1);
     }
+    // Replace separators with underscore
+    String name = path.replaceAll('/', '_').replaceAll(RegExp(r'[<>:"|?*]'), '_');
+    return '$name.csv';
   }
 
-  /// قراءة البيانات من ملف CSV
-  static Future<Map<String, ImageMetadata>> readMetadata() async {
+  static Future<File> _getCsvFileForAlbum(String albumPath) async {
+    final baseDir = await getBaseDataDirectory();
+    final fileName = _getSafeCsvName(albumPath);
+    return File(p.join(baseDir.path, fileName));
+  }
+
+  /// Create CSV for a given album and list of entries
+  static Future<void> createCsv(String albumPath, List<AvesEntry> entries) async {
+    final csvFile = await _getCsvFileForAlbum(albumPath);
+
+    final headers = ['title', 'file_name', 'tags'];
+    final rows = <List<dynamic>>[headers];
+
+    for (final entry in entries) {
+      rows.add(['', entry.filename ?? '', '']);
+    }
+
+    final csvContent = const ListToCsvConverter().convert(rows);
+    await csvFile.writeAsString(csvContent);
+  }
+
+  static final Map<String, (DateTime, Map<String, Map<String, String>>)> _cache = {};
+
+  /// Load CSV metadata for an album
+  /// Returns a Map where key is file_name and value is a Map of column headers to values
+  static Future<Map<String, Map<String, String>>> loadCsv(String albumPath) async {
+    final csvFile = await _getCsvFileForAlbum(albumPath);
+
+    if (!await csvFile.exists()) {
+      _cache.remove(albumPath);
+      return {};
+    }
+
     try {
-      final metadataFile = await getMetadataFile();
-      
-      if (!await metadataFile.exists()) {
-        return {};
-      }
-
-      final csvContent = await metadataFile.readAsString();
-      final rows = const CsvToListConverter().convert(csvContent);
-      
-      if (rows.isEmpty) return {};
-
-      // استخراج الرؤوس
-      final headers = rows[0].cast<String>();
-      
-      // تحويل الصفوف إلى كائنات ImageMetadata
-      final metadata = <String, ImageMetadata>{};
-      for (int i = 1; i < rows.length; i++) {
-        final imageData = ImageMetadata.fromCsvRow(rows[i], headers);
-        if (imageData.filename.isNotEmpty) {
-          metadata[imageData.filename] = imageData;
+      final lastModified = await csvFile.lastModified();
+      if (_cache.containsKey(albumPath)) {
+        final (cachedTime, cachedData) = _cache[albumPath]!;
+        if (cachedTime == lastModified) {
+          return cachedData;
         }
       }
-      
-      return metadata;
-    } catch (e) {
-      throw Exception('فشل قراءة ملف CSV: $e');
-    }
-  }
 
-  /// الحصول على البيانات الوصفية لصورة معينة
-  static Future<ImageMetadata?> getImageMetadata(String filename) async {
-    final metadata = await readMetadata();
-    return metadata[filename];
-  }
+      final csvContent = await csvFile.readAsString();
+      final rows = const CsvToListConverter().convert(csvContent);
 
-  /// تحديث البيانات الوصفية
-  static Future<void> updateMetadata(Map<String, ImageMetadata> metadata) async {
-    try {
-      final metadataFile = await getMetadataFile();
-      
-      // إنشاء رؤوس CSV
-      final headers = ['title', 'file name', 'tages'];
-      
-      // إنشاء الصفوف
-      final rows = <List<String>>[];
-      for (var data in metadata.values) {
-        rows.add([
-          data.title,
-          data.filename,
-          data.tags,
-        ]);
+      if (rows.isEmpty) return {};
+
+      final headers = rows[0].map((e) => e.toString()).toList();
+      final fileNameIndex = headers.indexOf('file_name');
+      if (fileNameIndex == -1) return {};
+
+      final metadataMap = <String, Map<String, String>>{};
+      for (int i = 1; i < rows.length; i++) {
+        final row = rows[i];
+        final fileName = row[fileNameIndex].toString();
+        if (fileName.isEmpty) continue;
+
+        final entryMetadata = <String, String>{};
+        for (int j = 0; j < headers.length; j++) {
+          if (j == fileNameIndex) continue;
+          if (j < row.length) {
+            entryMetadata[headers[j]] = row[j]?.toString() ?? '';
+          } else {
+            entryMetadata[headers[j]] = '';
+          }
+        }
+        metadataMap[fileName] = entryMetadata;
       }
-
-      // تحويل إلى CSV
-      final csvContent = const ListToCsvConverter().convert([headers, ...rows]);
-      
-      // كتابة الملف
-      await metadataFile.writeAsString(csvContent);
+      _cache[albumPath] = (lastModified, metadataMap);
+      return metadataMap;
     } catch (e) {
-      throw Exception('فشل تحديث ملف CSV: $e');
+      // ignore errors
+      return {};
     }
-  }
-
-  /// حذف ملف CSV
-  static Future<void> deleteMetadataFile() async {
-    try {
-      final metadataFile = await getMetadataFile();
-      if (await metadataFile.exists()) {
-        await metadataFile.delete();
-      }
-    } catch (e) {
-      throw Exception('فشل حذف ملف CSV: $e');
-    }
-  }
-
-  /// الحصول على مسار ملف CSV (للمستخدم)
-  static Future<String> getMetadataFilePath() async {
-    final file = await getMetadataFile();
-    return file.path;
   }
 }

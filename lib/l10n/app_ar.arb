@@ -949,5 +949,6 @@
     "settingsViewerShowZoomLevel": "إظهار مستوى التكبير",
     "settingsEnabled": "مُفعّل",
     "settingsForced": "قسري",
-    "collectionActionExportGpx": "تصدير GPX"
+    "collectionActionExportGpx": "تصدير GPX",
+    "collectionActionAddCustomCsv": "إضافة ملف بيانات"
 }

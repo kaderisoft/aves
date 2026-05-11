@@ -637,6 +637,8 @@
   "collectionActionRescan": "Rescan",
   "collectionActionEdit": "Edit",
   "collectionActionExportGpx": "Export GPX",
+  "collectionActionAddCustomCsv": "Add data file",
+  "@collectionActionAddCustomCsv": {},
 
   "collectionSearchTitlesHintText": "Search titles",
 

@@ -33,6 +33,7 @@ import 'package:aves/services/app_service.dart';
 import 'package:aves/services/common/image_op_events.dart';
 import 'package:aves/services/common/services.dart';
 import 'package:aves/services/media/media_edit_service.dart';
+import 'package:aves/services/metadata/csv_metadata_service.dart';
 import 'package:aves/theme/durations.dart';
 import 'package:aves/theme/themes.dart';
 import 'package:aves/utils/collection_utils.dart';
@@ -131,6 +132,8 @@ class EntrySetActionDelegate with FeedbackMixin, PermissionAwareMixin, SizeAware
       case .editTags:
       case .removeMetadata:
         return isMain && isSelecting && !isTrash && canWrite;
+      case .addCustomCsv:
+        return isMain && !isSelecting && !isTrash && canWrite;
       case .restore:
         return isMain && isSelecting && isTrash && canWrite;
     }
@@ -159,6 +162,7 @@ class EntrySetActionDelegate with FeedbackMixin, PermissionAwareMixin, SizeAware
       case .toggleTitleSearch:
       case .addShortcut:
       case .setHome:
+      case .addCustomCsv:
         return true;
       case .addDynamicAlbum:
         return collection.filters.isNotEmpty;
@@ -261,6 +265,8 @@ class EntrySetActionDelegate with FeedbackMixin, PermissionAwareMixin, SizeAware
         _editTags(context);
       case .removeMetadata:
         _removeMetadata(context);
+      case .addCustomCsv:
+        _addCustomCsv(context);
     }
   }
 
@@ -959,5 +965,21 @@ class EntrySetActionDelegate with FeedbackMixin, PermissionAwareMixin, SizeAware
   void _setHome(BuildContext context) async {
     settings.setHome(HomePageSetting.collection, customCollection: context.read<CollectionLens>().filters);
     showFeedback(context, FeedbackType.info, context.l10n.genericSuccessFeedback);
+  }
+
+  Future<void> _addCustomCsv(BuildContext context) async {
+    final collection = context.read<CollectionLens>();
+    final albumPath = collection.filters.whereType<AlbumFilter>().firstOrNull?.album;
+    if (albumPath == null) {
+      showFeedback(context, FeedbackType.warn, 'Please open an album first');
+      return;
+    }
+
+    try {
+      await CsvMetadataService.createCsv(albumPath, collection.sortedEntries);
+      showFeedback(context, FeedbackType.info, context.l10n.genericSuccessFeedback);
+    } catch (e) {
+      showFeedback(context, FeedbackType.warn, e.toString());
+    }
   }
 }
